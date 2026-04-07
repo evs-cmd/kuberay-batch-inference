@@ -91,8 +91,10 @@ helm repo add kuberay https://ray-project.github.io/kuberay-helm/
 helm install kuberay-operator kuberay/kuberay-operator -f k8s/kuberay-values.yaml
 
 # 2. Build and push image
-docker build -t vibs94/kuberay-batch:latest .
-docker push vibs94/kuberay-batch:latest
+docker build -t vibs94/kuberay-batch-inference:latest .
+docker push vibs94/kuberay-batch-inference:latest
+or
+minikube image build -t kuberay-batch-inference:latest .
 
 # 3. Deploy cluster + services
 kubectl apply -f k8s/raycluster.yaml
