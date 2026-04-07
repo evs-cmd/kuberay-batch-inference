@@ -5,8 +5,8 @@ Distributed offline batch inference using Ray + vLLM + FastAPI.
 ## Quick start
 
 ```bash
-git clone https://github.com/evs-cmd/kuberay-batch.git
-cd kuberay-batch
+git clone https://github.com/evs-cmd/kuberay-batch-inference.git
+cd kuberay-batch-inference
 make deploy
 ```
 
