@@ -12,7 +12,6 @@ set -euo pipefail
 LOG="[deploy]"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VENV="$PROJECT_DIR/venv"
-false
 
 # ── Stop mode ────────────────────────────────────────────────────
 if [ "${1:-}" = "stop" ]; then
