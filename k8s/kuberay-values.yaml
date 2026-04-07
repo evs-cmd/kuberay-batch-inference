@@ -1,0 +1,27 @@
+# KubeRay operator Helm values
+# Install with:
+#   helm repo add kuberay https://ray-project.github.io/kuberay-helm/
+#   helm install kuberay-operator kuberay/kuberay-operator -f k8s/kuberay-values.yaml
+
+image:
+  repository: quay.io/kuberay/operator
+  tag: v1.1.0
+  pullPolicy: IfNotPresent
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Watch all namespaces for RayCluster/RayJob CRDs
+watchNamespace: ""
+
+# Enable batch scheduling support
+batchScheduler:
+  enabled: false  # Enable if using Volcano/Yunikorn for multi-tenant scheduling
+
+logging:
+  level: info

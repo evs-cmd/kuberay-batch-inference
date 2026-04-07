@@ -1,0 +1,31 @@
+# RayJob — submit batch via K8s-native CRD
+# Alternative to: ray job submit --address http://localhost:8265
+#
+# Submit: kubectl apply -f k8s/rayjob.yaml
+# Status: kubectl get rayjob
+# Logs:   kubectl logs -l job-name=batch-inference-job
+
+apiVersion: ray.io/v1
+kind: RayJob
+metadata:
+  name: batch-inference-job
+spec:
+  clusterSelector:
+    ray.io/cluster: batch-inference
+
+  entrypoint: "python jobs/batch_job.py"
+
+  shutdownAfterJobFinishes: false
+  ttlSecondsAfterFinished: 300
+
+  submitterPodTemplate:
+    spec:
+      containers:
+        - name: job-submitter
+          image: kuberay-batch-inference:latest
+          imagePullPolicy: Never
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+      restartPolicy: Never

@@ -1,0 +1,129 @@
+# KubeRay RayCluster — deployed on minikube with GPU passthrough
+#
+# Setup:
+#   minikube start --driver=docker --gpus=all
+#   kubectl get nodes   # should show minikube Ready
+#   helm repo add kuberay https://ray-project.github.io/kuberay-helm/
+#   helm repo update
+#   helm install kuberay-operator kuberay/kuberay-operator -f k8s/kuberay-values.yaml
+#   kubectl get pods   # wait for kuberay-operator pod to be Running
+#   minikube image build -t kuberay-batch-inference:latest .
+#   kubectl apply -f k8s/raycluster.yaml
+#   kubectl apply -f k8s/service.yaml
+#   kubectl get pods -w
+
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: batch-inference
+  labels:
+    app: kuberay-batch-inference
+spec:
+  rayVersion: "2.35.0"
+
+  # ── Head node ──────────────────────────────────────────────────
+  # Runs Ray scheduler + GCS + dashboard
+  # FastAPI starts via postStart hook after Ray is up
+  headGroupSpec:
+    serviceType: ClusterIP
+    rayStartParams:
+      dashboard-host: "0.0.0.0"
+      num-cpus: "2"
+    template:
+      metadata:
+        labels:
+          ray-node-type: head
+      spec:
+        containers:
+          - name: ray-head
+            image: kuberay-batch-inference:latest
+            imagePullPolicy: Never
+            ports:
+              - containerPort: 6379
+                name: gcs
+              - containerPort: 8265
+                name: dashboard
+              - containerPort: 10001
+                name: client
+              - containerPort: 8000
+                name: api
+            lifecycle:
+              postStart:
+                exec:
+                  command:
+                    - /bin/bash
+                    - -c
+                    - |
+                      nohup bash -c '
+                        for i in $(seq 1 30); do
+                          ray status 2>/dev/null && break
+                          sleep 2
+                        done
+                        cd /app && uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-level info
+                      ' > /tmp/fastapi.log 2>&1 &
+            resources:
+              requests:
+                cpu: "2"
+                memory: "4Gi"
+              limits:
+                cpu: "4"
+                memory: "8Gi"
+            readinessProbe:
+              httpGet:
+                path: /health
+                port: 8000
+              initialDelaySeconds: 60
+              periodSeconds: 10
+            livenessProbe:
+              httpGet:
+                path: /health
+                port: 8000
+              initialDelaySeconds: 90
+              periodSeconds: 30
+            volumeMounts:
+              - name: results
+                mountPath: /tmp/batch_results
+        volumes:
+          - name: results
+            emptyDir:
+              sizeLimit: 1Gi
+
+  # ── GPU workers ────────────────────────────────────────────────
+  # Each worker: 1 GPU, persistent InferenceWorker actor with vLLM
+  workerGroupSpecs:
+    - groupName: gpu-workers
+      replicas: 1
+      minReplicas: 1
+      maxReplicas: 4
+      rayStartParams:
+        num-gpus: "1"
+      template:
+        metadata:
+          labels:
+            ray-node-type: worker
+        spec:
+          containers:
+            - name: ray-worker
+              image: kuberay-batch-inference:latest
+              imagePullPolicy: Never
+              resources:
+                requests:
+                  cpu: "2"
+                  memory: "8Gi"
+                  nvidia.com/gpu: "1"
+                limits:
+                  cpu: "4"
+                  memory: "16Gi"
+                  nvidia.com/gpu: "1"
+              volumeMounts:
+                - name: model-cache
+                  mountPath: /home/ray/.cache/huggingface
+          volumes:
+            - name: model-cache
+              hostPath:
+                path: /tmp/huggingface-cache
+                type: DirectoryOrCreate
+          tolerations:
+            - key: nvidia.com/gpu
+              operator: Exists
+              effect: NoSchedule
